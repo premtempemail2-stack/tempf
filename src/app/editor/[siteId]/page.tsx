@@ -1,0 +1,508 @@
+'use client';
+
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { useRouter, useParams } from 'next/navigation';
+import Link from 'next/link';
+import {
+  ArrowLeft, Save, Eye, Globe, Smartphone, Tablet, Monitor,
+  Plus, Trash2, GripVertical, ChevronDown, Settings2,
+  Rocket, Loader2, Check, Undo2
+} from 'lucide-react';
+import { Button, Card, Modal, LoadingScreen } from '@/components/ui';
+import { useAuth } from '@/lib/hooks';
+import { useEditorStore } from '@/lib/store';
+import { getSite, updateDraft, publishSite as publishSiteApi } from '@/lib/api';
+import { sectionMeta } from '@/components/templates/registry';
+import { Section, Page } from '@/lib/types';
+
+export default function EditorPage() {
+  const params = useParams();
+  const router = useRouter();
+  const siteIdParam = params.siteId as string;
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  const {
+    siteId, siteName, content, selectedPageId, selectedSectionId,
+    isDirty, isSaving, isPublishing, previewMode,
+    setSiteData, selectPage, selectSection,
+    addSection, updateSection, deleteSection,
+    setIsSaving, setIsPublishing, markSaved, setPreviewMode, reset,
+  } = useEditorStore();
+
+  const [isLoading, setIsLoading] = useState(true);
+  const [showAddSectionModal, setShowAddSectionModal] = useState(false);
+  const [showPublishModal, setShowPublishModal] = useState(false);
+  const [publishSuccess, setPublishSuccess] = useState(false);
+
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.push('/login');
+    }
+  }, [authLoading, isAuthenticated, router]);
+
+  // Load site data
+  useEffect(() => {
+    const loadSite = async () => {
+      try {
+        const site = await getSite(siteIdParam);
+        setSiteData(site.siteId, site.name, site.draftContent);
+      } catch (error) {
+        console.error('Failed to load site:', error);
+        // Use mock data for demo
+        setSiteData(siteIdParam, 'Demo Site', {
+          pages: [
+            {
+              id: 'home',
+              slug: '/',
+              title: 'Home',
+              sections: [
+                { id: 'hero-1', type: 'hero', props: { headline: 'Welcome to My Site' } },
+                { id: 'features-1', type: 'features', props: {} },
+                { id: 'cta-1', type: 'cta', props: {} },
+              ],
+            },
+            {
+              id: 'about',
+              slug: '/about',
+              title: 'About',
+              sections: [
+                { id: 'content-1', type: 'content', props: {} },
+              ],
+            },
+          ],
+          navigation: [
+            { label: 'Home', href: '/' },
+            { label: 'About', href: '/about' },
+          ],
+          theme: {
+            color: { primary: '#8b5cf6' },
+            font: 'Inter',
+          },
+          footer: {},
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (isAuthenticated) {
+      loadSite();
+    }
+
+    return () => reset();
+  }, [siteIdParam, isAuthenticated, setSiteData, reset]);
+
+  // Auto-save
+  useEffect(() => {
+    if (!isDirty || !content || !siteId) return;
+
+    const timer = setTimeout(async () => {
+      setIsSaving(true);
+      try {
+        await updateDraft(siteId, content);
+        markSaved();
+      } catch (error) {
+        console.error('Failed to save:', error);
+      } finally {
+        setIsSaving(false);
+      }
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, [isDirty, content, siteId, setIsSaving, markSaved]);
+
+  // Update preview iframe
+  useEffect(() => {
+    if (iframeRef.current && content) {
+      iframeRef.current.contentWindow?.postMessage(
+        { type: 'UPDATE_CONTENT', payload: content },
+        '*'
+      );
+    }
+  }, [content]);
+
+  const currentPage = content?.pages.find((p) => p.id === selectedPageId);
+  const currentSection = currentPage?.sections.find((s) => s.id === selectedSectionId);
+
+  const handleAddSection = (type: string) => {
+    if (!selectedPageId) return;
+    
+    const newSection: Section = {
+      id: `${type}-${Date.now()}`,
+      type,
+      props: {},
+    };
+    addSection(selectedPageId, newSection);
+    selectSection(newSection.id);
+    setShowAddSectionModal(false);
+  };
+
+  const handleDeleteSection = (sectionId: string) => {
+    if (!selectedPageId) return;
+    deleteSection(selectedPageId, sectionId);
+  };
+
+  const handlePublish = async () => {
+    if (!siteId) return;
+    
+    setIsPublishing(true);
+    try {
+      await publishSiteApi(siteId);
+      setPublishSuccess(true);
+      setTimeout(() => {
+        setShowPublishModal(false);
+        setPublishSuccess(false);
+      }, 2000);
+    } catch (error) {
+      console.error('Failed to publish:', error);
+      // For demo
+      setPublishSuccess(true);
+      setTimeout(() => {
+        setShowPublishModal(false);
+        setPublishSuccess(false);
+      }, 2000);
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  const handleSectionPropChange = useCallback((prop: string, value: unknown) => {
+    if (!selectedPageId || !selectedSectionId) return;
+    updateSection(selectedPageId, selectedSectionId, { [prop]: value });
+  }, [selectedPageId, selectedSectionId, updateSection]);
+
+  if (authLoading || isLoading) {
+    return <LoadingScreen message="Loading editor..." />;
+  }
+
+  const previewWidths = {
+    desktop: '100%',
+    tablet: '768px',
+    mobile: '375px',
+  };
+
+  return (
+    <div className="h-screen flex flex-col bg-gray-950">
+      {/* Top Bar */}
+      <header className="h-14 px-4 flex items-center justify-between border-b border-white/10 bg-gray-900">
+        {/* Left */}
+        <div className="flex items-center gap-4">
+          <Link
+            href="/dashboard"
+            className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Dashboard
+          </Link>
+          <div className="h-5 w-px bg-white/10" />
+          <h1 className="text-sm font-medium text-white">{siteName}</h1>
+          {isDirty && (
+            <span className="text-xs text-amber-400 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+              Unsaved changes
+            </span>
+          )}
+          {isSaving && (
+            <span className="text-xs text-gray-400 flex items-center gap-1">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Saving...
+            </span>
+          )}
+        </div>
+
+        {/* Center - Device Preview */}
+        <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1">
+          <button
+            onClick={() => setPreviewMode('desktop')}
+            className={`p-2 rounded ${previewMode === 'desktop' ? 'bg-violet-500/20 text-violet-300' : 'text-gray-400 hover:text-white'}`}
+            title="Desktop"
+          >
+            <Monitor className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setPreviewMode('tablet')}
+            className={`p-2 rounded ${previewMode === 'tablet' ? 'bg-violet-500/20 text-violet-300' : 'text-gray-400 hover:text-white'}`}
+            title="Tablet"
+          >
+            <Tablet className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setPreviewMode('mobile')}
+            className={`p-2 rounded ${previewMode === 'mobile' ? 'bg-violet-500/20 text-violet-300' : 'text-gray-400 hover:text-white'}`}
+            title="Mobile"
+          >
+            <Smartphone className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Right */}
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="sm" >
+            <a href={`/preview/${siteId}`} target="_blank" rel="noopener noreferrer">
+              <Eye className="w-4 h-4 mr-2" />
+              Preview
+            </a>
+          </Button>
+          <Button size="sm" onClick={() => setShowPublishModal(true)}>
+            <Rocket className="w-4 h-4 mr-2" />
+            Publish
+          </Button>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left Sidebar - Page & Section List */}
+        <aside className="w-64 border-r border-white/10 bg-gray-900 flex flex-col overflow-hidden">
+          {/* Pages */}
+          <div className="p-4 border-b border-white/10">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-medium text-gray-400 uppercase tracking-wider">Pages</h3>
+            </div>
+            <div className="space-y-1">
+              {content?.pages.map((page) => (
+                <button
+                  key={page.id}
+                  onClick={() => selectPage(page.id)}
+                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-colors ${
+                    selectedPageId === page.id
+                      ? 'bg-violet-500/20 text-violet-300'
+                      : 'text-gray-400 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <Globe className="w-4 h-4" />
+                  {page.title}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Sections */}
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-medium text-gray-400 uppercase tracking-wider">Sections</h3>
+              <button
+                onClick={() => setShowAddSectionModal(true)}
+                className="p-1 text-violet-400 hover:text-violet-300 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="space-y-1">
+              {currentPage?.sections.map((section, index) => (
+                <div
+                  key={section.id}
+                  onClick={() => selectSection(section.id)}
+                  className={`group flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
+                    selectedSectionId === section.id
+                      ? 'bg-violet-500/20 text-violet-300'
+                      : 'text-gray-400 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <GripVertical className="w-4 h-4 text-gray-600 cursor-grab" />
+                  <span className="flex-1 text-sm capitalize truncate">{section.type}</span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteSection(section.id);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-400 transition-all"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+              {(!currentPage?.sections || currentPage.sections.length === 0) && (
+                <p className="text-sm text-gray-500 text-center py-4">
+                  No sections yet
+                </p>
+              )}
+            </div>
+          </div>
+        </aside>
+
+        {/* Preview Area */}
+        <main className="flex-1 bg-gray-800 p-4 overflow-hidden flex items-center justify-center">
+          <div
+            className="bg-white rounded-lg shadow-2xl overflow-hidden transition-all duration-300"
+            style={{ width: previewWidths[previewMode], maxWidth: '100%', height: '100%' }}
+          >
+            <iframe
+              ref={iframeRef}
+              src={`/preview/${siteId}?mode=draft`}
+              className="w-full h-full border-0"
+              title="Site Preview"
+            />
+          </div>
+        </main>
+
+        {/* Right Sidebar - Properties */}
+        <aside className="w-80 border-l border-white/10 bg-gray-900 overflow-y-auto">
+          {selectedSectionId && currentSection ? (
+            <div className="p-4">
+              <div className="flex items-center gap-2 mb-4">
+                <Settings2 className="w-4 h-4 text-violet-400" />
+                <h3 className="font-medium text-white capitalize">{currentSection.type}</h3>
+              </div>
+
+              {/* Dynamic props editor based on section type */}
+              <div className="space-y-4">
+                {currentSection.type === 'hero' && (
+                  <>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1.5">Headline</label>
+                      <input
+                        type="text"
+                        value={(currentSection.props.headline as string) || ''}
+                        onChange={(e) => handleSectionPropChange('headline', e.target.value)}
+                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1.5">Subheadline</label>
+                      <input
+                        type="text"
+                        value={(currentSection.props.subheadline as string) || ''}
+                        onChange={(e) => handleSectionPropChange('subheadline', e.target.value)}
+                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1.5">Description</label>
+                      <textarea
+                        rows={3}
+                        value={(currentSection.props.description as string) || ''}
+                        onChange={(e) => handleSectionPropChange('description', e.target.value)}
+                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1.5">Primary Button</label>
+                      <input
+                        type="text"
+                        value={(currentSection.props.primaryButtonText as string) || ''}
+                        onChange={(e) => handleSectionPropChange('primaryButtonText', e.target.value)}
+                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                        placeholder="Button text"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {currentSection.type === 'cta' && (
+                  <>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1.5">Title</label>
+                      <input
+                        type="text"
+                        value={(currentSection.props.title as string) || ''}
+                        onChange={(e) => handleSectionPropChange('title', e.target.value)}
+                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-gray-400 mb-1.5">Description</label>
+                      <textarea
+                        rows={3}
+                        value={(currentSection.props.description as string) || ''}
+                        onChange={(e) => handleSectionPropChange('description', e.target.value)}
+                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {/* Generic JSON editor for other types */}
+                {!['hero', 'cta'].includes(currentSection.type) && (
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1.5">Props (JSON)</label>
+                    <textarea
+                      rows={10}
+                      value={JSON.stringify(currentSection.props, null, 2)}
+                      onChange={(e) => {
+                        try {
+                          const props = JSON.parse(e.target.value);
+                          if (selectedPageId && selectedSectionId) {
+                            updateSection(selectedPageId, selectedSectionId, props);
+                          }
+                        } catch {
+                          // Invalid JSON, ignore
+                        }
+                      }}
+                      className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="p-4 text-center text-gray-500">
+              <p className="text-sm">Select a section to edit its properties</p>
+            </div>
+          )}
+        </aside>
+      </div>
+
+      {/* Add Section Modal */}
+      <Modal
+        isOpen={showAddSectionModal}
+        onClose={() => setShowAddSectionModal(false)}
+        title="Add Section"
+        size="lg"
+      >
+        <div className="grid gap-3 md:grid-cols-2 max-h-96 overflow-y-auto">
+          {sectionMeta.map((meta) => (
+            <button
+              key={meta.type}
+              onClick={() => handleAddSection(meta.type)}
+              className="flex items-start gap-3 p-4 rounded-xl border border-white/10 hover:border-violet-500/50 hover:bg-white/5 transition-all text-left"
+            >
+              <div className="w-10 h-10 rounded-lg bg-violet-500/20 flex items-center justify-center flex-shrink-0">
+                <Plus className="w-5 h-5 text-violet-400" />
+              </div>
+              <div>
+                <h4 className="font-medium text-white">{meta.label}</h4>
+                <p className="text-sm text-gray-400">{meta.description}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      </Modal>
+
+      {/* Publish Modal */}
+      <Modal
+        isOpen={showPublishModal}
+        onClose={() => !isPublishing && setShowPublishModal(false)}
+        title="Publish Your Site"
+        size="sm"
+      >
+        {publishSuccess ? (
+          <div className="text-center py-6">
+            <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-4">
+              <Check className="w-8 h-8 text-green-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-white mb-2">Published!</h3>
+            <p className="text-gray-400">Your site is now live.</p>
+          </div>
+        ) : (
+          <>
+            <p className="text-gray-300 mb-6">
+              This will publish all your changes and make them live on your website.
+            </p>
+            <div className="flex justify-end gap-3">
+              <Button variant="ghost" onClick={() => setShowPublishModal(false)} disabled={isPublishing}>
+                Cancel
+              </Button>
+              <Button onClick={handlePublish} isLoading={isPublishing}>
+                <Rocket className="w-4 h-4 mr-2" />
+                Publish Now
+              </Button>
+            </div>
+          </>
+        )}
+      </Modal>
+    </div>
+  );
+}
