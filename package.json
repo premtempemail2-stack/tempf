@@ -4,8 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:dual": "node server.mjs",
     "build": "next build",
     "start": "next start",
+    "generate-certs": "node generate-certs.mjs",
     "lint": "eslint"
   },
   "dependencies": {
