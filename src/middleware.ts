@@ -20,28 +20,19 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Skip for main application routes
-  const appRoutes = [
-    '/',
-    '/login',
-    '/register',
-    '/dashboard',
-    '/editor',
-    '/templates',
-    '/preview',
-  ];
-  
-  if (appRoutes.some(route => pathname === route || pathname.startsWith(route + '/'))) {
-    return NextResponse.next();
-  }
+  // --- Subdomain & custom domain checks FIRST (before app routes) ---
 
-  // Check if this is a subdomain request (e.g., mysite.builder.com)
-  const isSubdomain = hostname.endsWith(`.${BUILDER_DOMAIN}`) || 
-                      hostname.includes('.') && !hostname.includes('localhost');
+  // Extract the hostname without port
+  const hostnameWithoutPort = hostname.split(':')[0];
+  const builderHostWithoutPort = BUILDER_DOMAIN.split(':')[0];
+
+  // Check if this is a subdomain request (e.g., mysite.localhost:3000 or mysite.builder.com)
+  const isSubdomain = hostnameWithoutPort !== builderHostWithoutPort &&
+                      hostnameWithoutPort.endsWith(`.${builderHostWithoutPort}`);
 
   if (isSubdomain) {
-    // Extract siteId from subdomain
-    const siteId = hostname.split('.')[0];
+    // Extract siteId from subdomain (everything before the builder domain)
+    const siteId = hostnameWithoutPort.replace(`.${builderHostWithoutPort}`, '');
     
     // Rewrite to the published site route
     const url = request.nextUrl.clone();
@@ -50,12 +41,9 @@ export function middleware(request: NextRequest) {
     return NextResponse.rewrite(url);
   }
 
-  // Check if this is a custom domain (not our builder domain)
-  if (!hostname.includes(BUILDER_DOMAIN) && !hostname.includes('localhost')) {
-    // This is a custom domain - we need to look up the siteId
-    // In production, this would be a database lookup or API call
-    // For now, we'll pass the domain as a query param for the site route to handle
-    
+  // Check if this is a custom domain (not our builder domain at all)
+  if (hostnameWithoutPort !== builderHostWithoutPort && 
+      !hostnameWithoutPort.endsWith(`.${builderHostWithoutPort}`)) {
     const url = request.nextUrl.clone();
     url.pathname = `/site/lookup`;
     url.searchParams.set('domain', hostname);
@@ -63,6 +51,8 @@ export function middleware(request: NextRequest) {
     
     return NextResponse.rewrite(url);
   }
+
+  // --- Main app routes (only reached for the builder domain itself) ---
 
   return NextResponse.next();
 }
