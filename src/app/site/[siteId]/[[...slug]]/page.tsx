@@ -64,9 +64,14 @@ export default async function PublishedSitePage({ params }: PageProps) {
   }
 
   // Find the correct page based on slug
+  // Seed data uses "index" for homepage, while some configs use "/"
   const currentPath = slug ? `/${slug.join("/")}` : "/";
   const currentPage =
-    content.pages.find((p) => p.slug === currentPath) || content.pages[0];
+    content.pages.find((p) => p.slug === currentPath) ||
+    (currentPath === "/"
+      ? content.pages.find((p) => p.slug === "index")
+      : null) ||
+    content.pages[0];
 
   if (!currentPage) {
     return (
