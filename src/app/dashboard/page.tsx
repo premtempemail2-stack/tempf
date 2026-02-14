@@ -1,16 +1,23 @@
-'use client';
+"use client";
 
-import { Suspense, useEffect, useState } from 'react';
-import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { 
-  Sparkles, Plus, ExternalLink, Settings, Globe, 
-  MoreVertical, ArrowUpRight, Clock 
-} from 'lucide-react';
-import { Button, Card, LoadingScreen, Modal } from '@/components/ui';
-import { useAuth } from '@/lib/hooks';
-import { getSites, createSite, getTemplates } from '@/lib/api';
-import { UserSite, Template } from '@/lib/types';
+import { Suspense, useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  Sparkles,
+  Plus,
+  ExternalLink,
+  Settings,
+  Globe,
+  MoreVertical,
+  ArrowUpRight,
+  Clock,
+  AlertTriangle,
+} from "lucide-react";
+import { Button, Card, LoadingScreen, Modal } from "@/components/ui";
+import { useAuth } from "@/lib/hooks";
+import { getSites, createSite, getTemplates } from "@/lib/api";
+import { UserSite, Template } from "@/lib/types";
 
 export default function DashboardPage() {
   return (
@@ -24,24 +31,26 @@ function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, isLoading: authLoading, isAuthenticated, logout } = useAuth();
-  
+
   const [sites, setSites] = useState<UserSite[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [showNewSiteModal, setShowNewSiteModal] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   // Redirect if not authenticated
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
-      router.push('/login');
+      router.push("/login");
     }
   }, [authLoading, isAuthenticated, router]);
 
   // Handle clone from template page
   useEffect(() => {
-    const cloneTemplateId = searchParams.get('clone');
+    const cloneTemplateId = searchParams.get("clone");
     if (cloneTemplateId && isAuthenticated) {
       setSelectedTemplate(cloneTemplateId);
       setShowNewSiteModal(true);
@@ -52,7 +61,7 @@ function DashboardContent() {
   useEffect(() => {
     const fetchData = async () => {
       if (!isAuthenticated) return;
-      
+
       try {
         const [sitesData, templatesData] = await Promise.all([
           getSites(),
@@ -60,29 +69,13 @@ function DashboardContent() {
         ]);
         setSites(sitesData);
         setTemplates(templatesData);
-      } catch (error) {
-        console.error('Failed to fetch data:', error);
-        // Mock data for demo
-        setSites([
-          {
-            _id: '1',
-            userId: '1',
-            templateId: '1',
-            templateVersion: '1.0.0',
-            siteId: 'my-awesome-site',
-            name: 'My Awesome Site',
-            draftContent: { pages: [], theme: {}, navigation: [], footer: {} },
-            publishedContent: null,
-            deploymentStatus: 'draft',
-            domainVerified: false,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-        ]);
-        setTemplates([
-          { _id: '1', name: 'SaaS Landing', version: '1.0.0', category: 'saas', isActive: true, config: { pages: [], theme: {}, navigation: [], footer: {} }, createdAt: '', updatedAt: '' },
-          { _id: '2', name: 'Portfolio Pro', version: '1.0.0', category: 'portfolio', isActive: true, config: { pages: [], theme: {}, navigation: [], footer: {} }, createdAt: '', updatedAt: '' },
-        ]);
+      } catch (err) {
+        console.error("Failed to fetch data:", err);
+        setFetchError(
+          err instanceof Error
+            ? err.message
+            : "Failed to load data. Make sure the backend API is running."
+        );
       } finally {
         setIsLoading(false);
       }
@@ -92,18 +85,21 @@ function DashboardContent() {
 
   const handleCreateSite = async () => {
     if (!selectedTemplate) return;
-    
+
     setIsCreating(true);
+    setCreateError(null);
     try {
       const newSite = await createSite({ templateId: selectedTemplate });
       router.push(`/editor/${newSite.siteId}`);
-    } catch (error) {
-      console.error('Failed to create site:', error);
-      // For demo, redirect to a mock editor
-      router.push(`/editor/new-site-${Date.now()}`);
+    } catch (err) {
+      console.error("Failed to create site:", err);
+      setCreateError(
+        err instanceof Error
+          ? err.message
+          : "Failed to create site. Please try again."
+      );
     } finally {
       setIsCreating(false);
-      setShowNewSiteModal(false);
     }
   };
 
@@ -117,7 +113,10 @@ function DashboardContent() {
       <aside className="fixed left-0 top-0 bottom-0 w-64 bg-gray-900 border-r border-white/10 flex flex-col">
         {/* Logo */}
         <div className="p-6 border-b border-white/10">
-          <Link href="/" className="flex items-center gap-2 text-xl font-bold text-white">
+          <Link
+            href="/"
+            className="flex items-center gap-2 text-xl font-bold text-white"
+          >
             <Sparkles className="w-6 h-6 text-violet-400" />
             WebBuilder
           </Link>
@@ -148,12 +147,12 @@ function DashboardContent() {
           <div className="flex items-center gap-3 px-4 py-2">
             <div className="w-8 h-8 rounded-full bg-violet-500/20 flex items-center justify-center">
               <span className="text-violet-400 text-sm font-medium">
-                {user?.name?.[0] || user?.email?.[0] || 'U'}
+                {user?.name?.[0] || user?.email?.[0] || "U"}
               </span>
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-white truncate">
-                {user?.name || 'User'}
+                {user?.name || "User"}
               </p>
               <p className="text-xs text-gray-500 truncate">{user?.email}</p>
             </div>
@@ -185,12 +184,25 @@ function DashboardContent() {
         {/* Sites Grid */}
         {isLoading ? (
           <LoadingScreen message="Loading your sites..." />
+        ) : fetchError ? (
+          <Card className="p-12 text-center">
+            <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-4">
+              <AlertTriangle className="w-8 h-8 text-red-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-white mb-2">
+              Failed to Load
+            </h3>
+            <p className="text-gray-400 mb-6 max-w-sm mx-auto">{fetchError}</p>
+            <Button onClick={() => window.location.reload()}>Retry</Button>
+          </Card>
         ) : sites.length === 0 ? (
           <Card className="p-12 text-center">
             <div className="w-16 h-16 rounded-full bg-violet-500/10 flex items-center justify-center mx-auto mb-4">
               <Globe className="w-8 h-8 text-violet-400" />
             </div>
-            <h3 className="text-lg font-semibold text-white mb-2">No sites yet</h3>
+            <h3 className="text-lg font-semibold text-white mb-2">
+              No sites yet
+            </h3>
             <p className="text-gray-400 mb-6 max-w-sm mx-auto">
               Create your first website by choosing a template
             </p>
@@ -213,9 +225,12 @@ function DashboardContent() {
                     <Link href={`/editor/${site.siteId}`}>
                       <Button size="sm">Edit</Button>
                     </Link>
-                    {site.deploymentStatus === 'published' && (
+                    {site.deploymentStatus === "published" && (
                       <a
-                        href={`https://${site.customDomain || `${site.siteId}.${process.env.NEXT_PUBLIC_BUILDER_DOMAIN}`}`}
+                        href={`https://${
+                          site.customDomain ||
+                          `${site.siteId}.${process.env.NEXT_PUBLIC_BUILDER_DOMAIN}`
+                        }`}
                         target="_blank"
                         rel="noopener noreferrer"
                       >
@@ -245,12 +260,14 @@ function DashboardContent() {
                   <div className="flex items-center gap-2 mt-3">
                     <span
                       className={`text-xs px-2 py-0.5 rounded-full ${
-                        site.deploymentStatus === 'published'
-                          ? 'bg-green-500/20 text-green-400'
-                          : 'bg-amber-500/20 text-amber-400'
+                        site.deploymentStatus === "published"
+                          ? "bg-green-500/20 text-green-400"
+                          : "bg-amber-500/20 text-amber-400"
                       }`}
                     >
-                      {site.deploymentStatus === 'published' ? 'Published' : 'Draft'}
+                      {site.deploymentStatus === "published"
+                        ? "Published"
+                        : "Draft"}
                     </span>
                     {site.customDomain && site.domainVerified && (
                       <span className="text-xs text-gray-500">
@@ -294,8 +311,8 @@ function DashboardContent() {
               onClick={() => setSelectedTemplate(template._id)}
               className={`p-4 rounded-xl border cursor-pointer transition-all ${
                 selectedTemplate === template._id
-                  ? 'border-violet-500 bg-violet-500/10'
-                  : 'border-white/10 hover:border-white/20 bg-white/5'
+                  ? "border-violet-500 bg-violet-500/10"
+                  : "border-white/10 hover:border-white/20 bg-white/5"
               }`}
             >
               <div className="aspect-video rounded-lg bg-gray-800 mb-3 overflow-hidden">
@@ -312,7 +329,9 @@ function DashboardContent() {
                 )}
               </div>
               <h4 className="font-medium text-white">{template.name}</h4>
-              <p className="text-sm text-gray-400 capitalize">{template.category}</p>
+              <p className="text-sm text-gray-400 capitalize">
+                {template.category}
+              </p>
             </div>
           ))}
         </div>
@@ -329,6 +348,11 @@ function DashboardContent() {
             Create Site
           </Button>
         </div>
+        {createError && (
+          <p className="text-red-400 text-sm mt-3 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+            {createError}
+          </p>
+        )}
       </Modal>
     </div>
   );

@@ -34,18 +34,19 @@ export const updateDraft = async (
 
 // Get preview (draft) content
 export const getPreview = async (siteId: string): Promise<TemplateConfig> => {
-  const response = await apiClient.get<ApiResponse<TemplateConfig>>(
+  const response = await apiClient.get<ApiResponse<{ content: TemplateConfig }>>(
     `/sites/${siteId}/preview`
   );
-  return response.data.data;
+  return response.data.data.content;
 };
 
-// Get published content
+// Get published content (public endpoint)
 export const getPublished = async (siteId: string): Promise<TemplateConfig> => {
-  const response = await apiClient.get<ApiResponse<TemplateConfig>>(
-    `/sites/${siteId}/published`
+  const baseUrl = (apiClient.defaults.baseURL || '').replace(/\/api$/, '');
+  const response = await apiClient.get<ApiResponse<{ content: TemplateConfig }>>(
+    `${baseUrl}/public/sites/${siteId}`
   );
-  return response.data.data;
+  return response.data.data.content;
 };
 
 // Publish site

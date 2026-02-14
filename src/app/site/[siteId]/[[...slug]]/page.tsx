@@ -1,4 +1,4 @@
-import { getPublished } from "@/lib/api";
+import { getPublishedServer } from "@/lib/api/server-api";
 import { TemplateConfig } from "@/lib/types";
 import { Navbar, Footer } from "@/components/templates";
 import SectionRenderer from "@/components/templates/SectionRenderer";
@@ -36,35 +36,13 @@ export async function generateMetadata({
 
 async function getContent(siteId: string): Promise<TemplateConfig | null> {
   try {
-    return await getPublished(siteId);
-  } catch {
-    // Return demo content
-    return {
-      pages: [
-        {
-          id: "home",
-          slug: "/",
-          title: "Home",
-          sections: [
-            {
-              id: "hero-1",
-              type: "hero",
-              props: {
-                headline: "Welcome to This Website",
-                subheadline: "Published Site",
-                description:
-                  "This is a published website created with WebBuilder.",
-              },
-            },
-            { id: "features-1", type: "features", props: {} },
-            { id: "cta-1", type: "cta", props: {} },
-          ],
-        },
-      ],
-      navigation: [{ label: "Home", href: "/" }],
-      theme: { color: { primary: "#8b5cf6" } },
-      footer: {},
-    };
+    return await getPublishedServer(siteId);
+  } catch (error) {
+    console.error(
+      `Failed to fetch published content for site "${siteId}":`,
+      error
+    );
+    return null;
   }
 }
 
