@@ -12,6 +12,7 @@ export { default as Team } from './Team';
 export { default as Gallery } from './Gallery';
 export { default as Content } from './Content';
 export { default as FallbackSection } from './FallbackSection';
+export { default as SectionRenderer } from './SectionRenderer';
 
 export {
   componentRegistry,
