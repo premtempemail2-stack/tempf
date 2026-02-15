@@ -34,10 +34,20 @@ import {
   updateDraft,
   publishSite as publishSiteApi,
   updateSiteDomain,
+  verifyDomain as verifyDomainApi,
+  getDomains as getDomainsApi,
+  deleteDomain as deleteDomainApi,
 } from "@/lib/api";
 import { sectionMeta } from "@/components/templates/registry";
 import { Section, Page } from "@/lib/types";
 import { PublishSiteResponse, DomainSetupInfo } from "@/lib/types/api";
+
+type CollisionInfo = {
+  isOwner: boolean;
+  linkedSiteName: string;
+  linkedSiteId: string;
+  domainId: string;
+};
 
 export default function EditorPage() {
   const params = useParams();
@@ -101,6 +111,11 @@ export default function EditorPage() {
   const [domainSettingsResult, setDomainSettingsResult] =
     useState<DomainSetupInfo | null>(null);
   const [copiedToken, setCopiedToken] = useState(false);
+  const [collisionInfo, setCollisionInfo] = useState<CollisionInfo | null>(
+    null
+  );
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [unlinkAndReassign, setUnlinkAndReassign] = useState(false);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -195,8 +210,7 @@ export default function EditorPage() {
 
   const isFirstPublish = deploymentStatus === "draft";
 
-  const domainRegex =
-    /^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9]?\.[a-zA-Z]{2,}$/;
+  const domainRegex = /^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$/i;
 
   const handleOpenPublish = () => {
     setPublishError(null);
@@ -239,13 +253,26 @@ export default function EditorPage() {
         setStoreDomain(result.customDomain, result.domainVerified);
       }
       setPublishStep("success");
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to publish:", err);
-      setPublishError(
-        err instanceof Error
-          ? err.message
-          : "Failed to publish site. Please try again."
-      );
+
+      const errorData = err.response?.data;
+      if (
+        errorData?.message === "Domain already registered" &&
+        errorData.data
+      ) {
+        // Switch to domain settings modal or handle it inside publish modal?
+        // Let's show it in the publish modal error area or reuse collisionInfo if we can.
+        setDomainSettingsInput(domainInput.trim());
+        setCollisionInfo(errorData.data);
+        setPublishStep("domain"); // Go back to domain step to show error/unlink
+      } else {
+        setPublishError(
+          err instanceof Error
+            ? err.message
+            : "Failed to publish site. Please try again."
+        );
+      }
     } finally {
       setIsPublishing(false);
     }
@@ -261,7 +288,7 @@ export default function EditorPage() {
     setShowDomainModal(true);
   };
 
-  const handleUpdateDomain = async () => {
+  const handleUpdateDomain = async (force: boolean = false) => {
     if (!siteId) return;
 
     const newDomain = domainSettingsInput.trim() || null;
@@ -272,6 +299,8 @@ export default function EditorPage() {
 
     setDomainSettingsLoading(true);
     setDomainSettingsError(null);
+    setCollisionInfo(null);
+
     try {
       const result = await updateSiteDomain(siteId, newDomain);
       setStoreDomain(result.customDomain, result.domainVerified);
@@ -280,12 +309,84 @@ export default function EditorPage() {
       } else {
         setShowDomainModal(false);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to update domain:", err);
+
+      const errorData = err.response?.data;
+      if (
+        errorData?.message === "Domain already registered" &&
+        errorData.data
+      ) {
+        setCollisionInfo(errorData.data);
+      } else {
+        setDomainSettingsError(
+          err instanceof Error
+            ? err.message
+            : "Failed to update domain. Please try again."
+        );
+      }
+    } finally {
+      setDomainSettingsLoading(false);
+    }
+  };
+
+  const handleVerifyDomain = async () => {
+    if (!siteId) return;
+
+    // We need the domain ID. Since we don't have it directly in the store,
+    // we'll find it by fetching domains if not already known,
+    // but the backend verify endpoint usually takes the domain ID.
+    // Let's assume we can get it from the domain list.
+
+    setIsVerifying(true);
+    try {
+      const domains = await getDomainsApi();
+      const domainRecord = domains.find((d) => d.domain === storeDomain);
+
+      if (!domainRecord) {
+        throw new Error("Domain record not found");
+      }
+
+      const result = await verifyDomainApi(domainRecord._id);
+      setStoreDomain(result.domain, result.verified);
+      if (result.verified) {
+        // Success!
+        setDomainSettingsResult(null); // Clear instructions
+      }
+    } catch (err) {
+      console.error("Verification failed:", err);
       setDomainSettingsError(
-        err instanceof Error
-          ? err.message
-          : "Failed to update domain. Please try again."
+        err instanceof Error ? err.message : "Verification failed. Check DNS."
+      );
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const handleUnlinkAndReassign = async () => {
+    if (!collisionInfo || !siteId) return;
+
+    setDomainSettingsLoading(true);
+    setDomainSettingsError(null);
+    try {
+      // 1. Unlink from old site (this usually means deleting the domain record if we want to re-add it)
+      await deleteDomainApi(collisionInfo.domainId);
+
+      // 2. Re-assign to current site
+      const newDomain = domainSettingsInput.trim();
+      const result = await updateSiteDomain(siteId, newDomain);
+
+      setStoreDomain(result.customDomain, result.domainVerified);
+      if (result.domainSetup) {
+        setDomainSettingsResult(result.domainSetup);
+      } else {
+        setShowDomainModal(false);
+      }
+      setCollisionInfo(null);
+    } catch (err) {
+      console.error("Failed to unlink and reassign:", err);
+      setDomainSettingsError(
+        err instanceof Error ? err.message : "Unlink failed. Please try again."
       );
     } finally {
       setDomainSettingsLoading(false);
@@ -955,13 +1056,80 @@ export default function EditorPage() {
         title="Domain Settings"
         size="md"
       >
-        {domainSettingsResult ? (
+        {collisionInfo ? (
+          <div className="py-2">
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4 mb-6">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="text-sm font-medium text-amber-300 mb-1">
+                    Domain Already Linked
+                  </h4>
+                  <p className="text-sm text-gray-400">
+                    The domain{" "}
+                    <span className="text-white font-medium">
+                      {domainSettingsInput}
+                    </span>{" "}
+                    is currently linked to your site{" "}
+                    <span className="text-white font-medium">
+                      "{collisionInfo.linkedSiteName}"
+                    </span>
+                    .
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <p className="text-sm text-gray-300 mb-6">
+              Would you like to unlink it from{" "}
+              <span className="italic">"{collisionInfo.linkedSiteName}"</span>{" "}
+              and use it for <span className="font-medium">"{siteName}"</span>?
+              This will disable the domain on the other site immediately.
+            </p>
+
+            <div className="flex justify-between items-center bg-white/5 p-4 rounded-xl border border-white/10">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-violet-500/20 rounded-lg">
+                  <Rocket className="w-5 h-5 text-violet-400" />
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Target Site</p>
+                  <p className="text-sm font-medium text-white">{siteName}</p>
+                </div>
+              </div>
+              <div className="h-4 w-px bg-white/10" />
+              <Check className="w-5 h-5 text-green-400" />
+            </div>
+
+            <div className="flex justify-end gap-3 mt-8">
+              <Button
+                variant="ghost"
+                onClick={() => setCollisionInfo(null)}
+                disabled={domainSettingsLoading}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleUnlinkAndReassign}
+                isLoading={domainSettingsLoading}
+                className="bg-amber-600 hover:bg-amber-500 text-white border-none"
+              >
+                Unlink and Use Here
+              </Button>
+            </div>
+          </div>
+        ) : domainSettingsResult ? (
           <div>
             <div className="text-center mb-4">
-              <div className="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-3">
-                <Check className="w-6 h-6 text-green-400" />
+              <div className="w-12 h-12 rounded-full bg-violet-500/20 flex items-center justify-center mx-auto mb-3">
+                <Check className="w-6 h-6 text-violet-400" />
               </div>
-              <p className="text-white font-medium">Domain Updated</p>
+              <p className="text-white font-medium">
+                Domain Successfully Added
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                Next: Configure your DNS to go live
+              </p>
             </div>
 
             <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4 mb-4">
@@ -971,7 +1139,9 @@ export default function EditorPage() {
               </h4>
               <div className="space-y-3">
                 <div className="bg-black/20 rounded-lg p-3">
-                  <p className="text-xs text-gray-500 mb-1">TXT Record</p>
+                  <p className="text-xs text-gray-500 mb-1">
+                    TXT Record (Ownership Verification)
+                  </p>
                   <div className="flex items-center justify-between">
                     <code className="text-xs text-violet-300 font-mono break-all">
                       {domainSettingsResult.verificationToken}
@@ -991,42 +1161,69 @@ export default function EditorPage() {
                   </div>
                 </div>
                 <div className="bg-black/20 rounded-lg p-3">
-                  <p className="text-xs text-gray-500 mb-1">CNAME Record</p>
+                  <p className="text-xs text-gray-500 mb-1">
+                    CNAME Record (Routing Traffic)
+                  </p>
                   <code className="text-xs text-violet-300 font-mono">
-                    {storeDomain} → {siteId}.
+                    {domainSettingsInput || storeDomain} → {siteId}.
                     {process.env.NEXT_PUBLIC_BUILDER_DOMAIN || "builder.com"}
                   </code>
                 </div>
               </div>
             </div>
 
-            <div className="flex justify-end">
-              <Button onClick={() => setShowDomainModal(false)}>Done</Button>
+            <div className="flex justify-end gap-3">
+              <Button variant="ghost" onClick={() => setShowDomainModal(false)}>
+                Setup Later
+              </Button>
+              <Button onClick={handleVerifyDomain} isLoading={isVerifying}>
+                Verify DNS Now
+              </Button>
             </div>
           </div>
         ) : (
           <div>
             {storeDomain && (
               <div className="bg-white/5 rounded-lg p-3 mb-4">
-                <p className="text-sm text-gray-400">
-                  Current domain:{" "}
-                  <span className="text-white font-medium">{storeDomain}</span>
-                </p>
-                <p className="text-xs mt-1">
-                  {domainVerified ? (
-                    <span className="text-green-400">✓ Verified</span>
-                  ) : (
-                    <span className="text-amber-400">
-                      ⏳ Pending verification
-                    </span>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="text-sm text-gray-400">
+                      Current domain:{" "}
+                      <span className="text-white font-medium">
+                        {storeDomain}
+                      </span>
+                    </p>
+                    <p className="text-xs mt-1">
+                      {domainVerified ? (
+                        <span className="text-green-400 flex items-center gap-1">
+                          <Check className="w-3 h-3" /> Verified & Live
+                        </span>
+                      ) : (
+                        <span className="text-amber-400 flex items-center gap-1">
+                          <Loader2 className="w-3 h-3 animate-spin" /> Pending
+                          Verification
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  {!domainVerified && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs bg-amber-500/10 text-amber-400 hover:bg-amber-500/20"
+                      onClick={handleVerifyDomain}
+                      isLoading={isVerifying}
+                    >
+                      Verify Now
+                    </Button>
                   )}
-                </p>
+                </div>
               </div>
             )}
 
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-300 mb-1.5">
-                {storeDomain ? "New Domain" : "Custom Domain"}
+                {storeDomain ? "Update Domain" : "Custom Domain"}
               </label>
               <input
                 type="text"
@@ -1054,10 +1251,10 @@ export default function EditorPage() {
                     variant="ghost"
                     onClick={handleRemoveDomain}
                     disabled={domainSettingsLoading}
-                    className="text-red-400 hover:text-red-300"
+                    className="text-red-400 hover:text-red-300 px-0"
                   >
                     <Trash2 className="w-4 h-4 mr-1" />
-                    Remove Domain
+                    Remove
                   </Button>
                 )}
               </div>
@@ -1070,11 +1267,14 @@ export default function EditorPage() {
                   Cancel
                 </Button>
                 <Button
-                  onClick={handleUpdateDomain}
+                  onClick={() => handleUpdateDomain()}
                   isLoading={domainSettingsLoading}
-                  disabled={!domainSettingsInput.trim()}
+                  disabled={
+                    !domainSettingsInput.trim() ||
+                    domainSettingsInput === storeDomain
+                  }
                 >
-                  {storeDomain ? "Update Domain" : "Add Domain"}
+                  {storeDomain ? "Update" : "Add Domain"}
                 </Button>
               </div>
             </div>

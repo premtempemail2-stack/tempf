@@ -7,7 +7,7 @@ import type { NextRequest } from 'next/server';
 const BUILDER_DOMAIN = process.env.NEXT_PUBLIC_BUILDER_DOMAIN || 'localhost:3000';
 const EC2_PUBLIC_IP = process.env.NEXT_PUBLIC_EC2_PUBLIC_IP || '';
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const hostname = request.headers.get('host') || '';
   const pathname = request.nextUrl.pathname;
 
@@ -51,9 +51,29 @@ export function middleware(request: NextRequest) {
   }
 
   // 3. This must be a custom domain (not our builder domain and not our EC2 IP)
+  try {
+    // Call the lookup API directly from middleware
+    const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api').replace(/\/api$/, '');
+    const res = await fetch(`${API_URL}/public/domains/lookup/${host}`, {
+      next: { revalidate: 300 } // Cache the fetch result if possible
+    });
+
+    if (res.ok) {
+      const json = await res.json();
+      const siteId = json.data.siteId;
+      
+      const url = request.nextUrl.clone();
+      url.pathname = `/site/${siteId}${pathname}`;
+      return NextResponse.rewrite(url);
+    }
+  } catch (error) {
+    console.error('Middleware domain lookup error:', error);
+  }
+
+  // Fallback to the lookup page if API fails or site not found
   const url = request.nextUrl.clone();
   url.pathname = `/site/lookup`;
-  url.searchParams.set('domain', host); // Use full host including www for lookup
+  url.searchParams.set('domain', host);
   url.searchParams.set('path', pathname);
   
   return NextResponse.rewrite(url);
