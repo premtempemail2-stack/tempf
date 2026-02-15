@@ -16,6 +16,8 @@ export { default as ProjectGrid } from './ProjectGrid';
 export { default as FallbackSection } from './FallbackSection';
 export { default as SectionRenderer } from './SectionRenderer';
 
+export * from './school1';
+
 export {
   componentRegistry,
   renderSection,

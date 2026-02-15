@@ -21,6 +21,14 @@ import Content from "./Content";
 import ProjectGrid from "./ProjectGrid";
 import FallbackSection from "./FallbackSection";
 
+// School1 specifically themed components
+import {
+  School1Navbar,
+  School1Hero,
+  School1Stats,
+  School1BrainTraining,
+} from "./school1";
+
 // Component Registry - maps section types to React components
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const componentRegistry: Record<string, ComponentType<any>> = {
@@ -39,6 +47,11 @@ export const componentRegistry: Record<string, ComponentType<any>> = {
   gallery: Gallery,
   content: Content,
   projectgrid: ProjectGrid,
+  // School1 Sections
+  school1navbar: School1Navbar,
+  school1hero: School1Hero,
+  school1stats: School1Stats,
+  school1braintraining: School1BrainTraining,
 };
 
 // Render a single section by type (case-insensitive lookup)
@@ -141,5 +154,17 @@ export const sectionMeta: SectionMeta[] = [
     label: "Content",
     description: "Rich text content block",
     icon: "FileText",
+  },
+  {
+    type: "school1hero",
+    label: "School1 Hero",
+    description: "School themed hero with characters",
+    icon: "Layout",
+  },
+  {
+    type: "school1stats",
+    label: "School1 Stats",
+    description: "School themed statistics bar",
+    icon: "BarChart",
   },
 ];
