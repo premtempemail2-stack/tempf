@@ -59,6 +59,42 @@ export interface AddDomainRequest {
   siteId: string;
 }
 
+// Publish site request
+export interface PublishSiteRequest {
+  customDomain?: string;
+}
+
+// Update domain request
+export interface UpdateDomainRequest {
+  customDomain: string | null;
+}
+
+// Domain setup instructions (returned from publish/update)
+export interface DomainSetupInfo {
+  domainId: string;
+  verificationToken: string;
+  instructions: Record<string, string>;
+}
+
+// Publish site response
+export interface PublishSiteResponse {
+  siteId: string;
+  publishedAt: string;
+  publishedUrl: string;
+  customDomain: string | null;
+  domainVerified: boolean;
+  isFirstPublish: boolean;
+  domainSetup?: DomainSetupInfo;
+}
+
+// Update domain response
+export interface UpdateDomainResponse {
+  siteId: string;
+  customDomain: string | null;
+  domainVerified: boolean;
+  domainSetup?: DomainSetupInfo;
+}
+
 // DNS verification response
 export interface DnsVerificationInfo {
   domain: string;

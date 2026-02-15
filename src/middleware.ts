@@ -5,6 +5,7 @@ import type { NextRequest } from 'next/server';
 // Maps custom domains to site IDs and rewrites to the published site route
 
 const BUILDER_DOMAIN = process.env.NEXT_PUBLIC_BUILDER_DOMAIN || 'localhost:3000';
+const EC2_PUBLIC_IP = process.env.NEXT_PUBLIC_EC2_PUBLIC_IP || '';
 
 export function middleware(request: NextRequest) {
   const hostname = request.headers.get('host') || '';
@@ -23,16 +24,24 @@ export function middleware(request: NextRequest) {
   // --- Subdomain & custom domain checks FIRST (before app routes) ---
 
   // Extract the hostname without port
-  const hostnameWithoutPort = hostname.split(':')[0];
-  const builderHostWithoutPort = BUILDER_DOMAIN.split(':')[0];
+  const host = hostname.split(':')[0].toLowerCase();
+  const builderHost = BUILDER_DOMAIN.split(':')[0].toLowerCase();
 
-  // Check if this is a subdomain request (e.g., mysite.localhost:3000 or mysite.builder.com)
-  const isSubdomain = hostnameWithoutPort !== builderHostWithoutPort &&
-                      hostnameWithoutPort.endsWith(`.${builderHostWithoutPort}`);
+  // Normalize by removing 'www.' prefix for comparison
+  const normalizedHost = host.startsWith('www.') ? host.slice(4) : host;
+  const normalizedBuilderHost = builderHost.startsWith('www.') ? builderHost.slice(4) : builderHost;
+
+  // 1. Check if this is the main builder domain or the EC2 IP
+  if (normalizedHost === normalizedBuilderHost || (EC2_PUBLIC_IP && normalizedHost === EC2_PUBLIC_IP.toLowerCase())) {
+    return NextResponse.next();
+  }
+
+  // 2. Check if this is a subdomain request (e.g., mysite.localhost:3000 or mysite.builder.com)
+  const isSubdomain = normalizedHost.endsWith(`.${normalizedBuilderHost}`);
 
   if (isSubdomain) {
     // Extract siteId from subdomain (everything before the builder domain)
-    const siteId = hostnameWithoutPort.replace(`.${builderHostWithoutPort}`, '');
+    const siteId = normalizedHost.replace(`.${normalizedBuilderHost}`, '');
     
     // Rewrite to the published site route
     const url = request.nextUrl.clone();
@@ -41,20 +50,13 @@ export function middleware(request: NextRequest) {
     return NextResponse.rewrite(url);
   }
 
-  // Check if this is a custom domain (not our builder domain at all)
-  if (hostnameWithoutPort !== builderHostWithoutPort && 
-      !hostnameWithoutPort.endsWith(`.${builderHostWithoutPort}`)) {
-    const url = request.nextUrl.clone();
-    url.pathname = `/site/lookup`;
-    url.searchParams.set('domain', hostname);
-    url.searchParams.set('path', pathname);
-    
-    return NextResponse.rewrite(url);
-  }
-
-  // --- Main app routes (only reached for the builder domain itself) ---
-
-  return NextResponse.next();
+  // 3. This must be a custom domain (not our builder domain and not our EC2 IP)
+  const url = request.nextUrl.clone();
+  url.pathname = `/site/lookup`;
+  url.searchParams.set('domain', host); // Use full host including www for lookup
+  url.searchParams.set('path', pathname);
+  
+  return NextResponse.rewrite(url);
 }
 
 export const config = {

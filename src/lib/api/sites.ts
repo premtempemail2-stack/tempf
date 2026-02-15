@@ -1,6 +1,12 @@
 import apiClient from './client';
 import { UserSite, TemplateConfig, AvailableUpgrade, DynamicContentItem } from '../types';
-import { ApiResponse, CreateSiteRequest } from '../types/api';
+import {
+  ApiResponse,
+  CreateSiteRequest,
+  PublishSiteRequest,
+  PublishSiteResponse,
+  UpdateDomainResponse,
+} from '../types/api';
 
 // Get all sites for current user
 export const getSites = async (): Promise<UserSite[]> => {
@@ -50,9 +56,25 @@ export const getPublished = async (siteId: string): Promise<TemplateConfig> => {
 };
 
 // Publish site
-export const publishSite = async (siteId: string): Promise<UserSite> => {
-  const response = await apiClient.post<ApiResponse<UserSite>>(
-    `/sites/${siteId}/publish`
+export const publishSite = async (
+  siteId: string,
+  options?: PublishSiteRequest
+): Promise<PublishSiteResponse> => {
+  const response = await apiClient.post<ApiResponse<PublishSiteResponse>>(
+    `/sites/${siteId}/publish`,
+    options || {}
+  );
+  return response.data.data;
+};
+
+// Update custom domain
+export const updateSiteDomain = async (
+  siteId: string,
+  customDomain: string | null
+): Promise<UpdateDomainResponse> => {
+  const response = await apiClient.put<ApiResponse<UpdateDomainResponse>>(
+    `/sites/${siteId}/domain`,
+    { customDomain }
   );
   return response.data.data;
 };

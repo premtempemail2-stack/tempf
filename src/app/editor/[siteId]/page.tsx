@@ -21,13 +21,23 @@ import {
   Check,
   Undo2,
   AlertTriangle,
+  Link as LinkIcon,
+  ExternalLink,
+  Copy,
+  X,
 } from "lucide-react";
 import { Button, Card, Modal, LoadingScreen } from "@/components/ui";
 import { useAuth } from "@/lib/hooks";
 import { useEditorStore } from "@/lib/store";
-import { getSite, updateDraft, publishSite as publishSiteApi } from "@/lib/api";
+import {
+  getSite,
+  updateDraft,
+  publishSite as publishSiteApi,
+  updateSiteDomain,
+} from "@/lib/api";
 import { sectionMeta } from "@/components/templates/registry";
 import { Section, Page } from "@/lib/types";
+import { PublishSiteResponse, DomainSetupInfo } from "@/lib/types/api";
 
 export default function EditorPage() {
   const params = useParams();
@@ -46,6 +56,9 @@ export default function EditorPage() {
     isSaving,
     isPublishing,
     previewMode,
+    deploymentStatus,
+    customDomain: storeDomain,
+    domainVerified,
     setSiteData,
     selectPage,
     selectSection,
@@ -56,6 +69,8 @@ export default function EditorPage() {
     setIsPublishing,
     markSaved,
     setPreviewMode,
+    setDeploymentStatus,
+    setCustomDomain: setStoreDomain,
     reset,
   } = useEditorStore();
 
@@ -63,8 +78,29 @@ export default function EditorPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showAddSectionModal, setShowAddSectionModal] = useState(false);
   const [showPublishModal, setShowPublishModal] = useState(false);
+  const [showDomainModal, setShowDomainModal] = useState(false);
   const [publishSuccess, setPublishSuccess] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
+  const [publishResult, setPublishResult] =
+    useState<PublishSiteResponse | null>(null);
+
+  // Domain flow state
+  const [publishStep, setPublishStep] = useState<
+    "domain" | "confirm" | "success"
+  >("domain");
+  const [domainInput, setDomainInput] = useState("");
+  const [domainError, setDomainError] = useState<string | null>(null);
+  const [skipDomain, setSkipDomain] = useState(false);
+
+  // Domain settings modal state
+  const [domainSettingsInput, setDomainSettingsInput] = useState("");
+  const [domainSettingsError, setDomainSettingsError] = useState<string | null>(
+    null
+  );
+  const [domainSettingsLoading, setDomainSettingsLoading] = useState(false);
+  const [domainSettingsResult, setDomainSettingsResult] =
+    useState<DomainSetupInfo | null>(null);
+  const [copiedToken, setCopiedToken] = useState(false);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -78,7 +114,14 @@ export default function EditorPage() {
     const loadSite = async () => {
       try {
         const site = await getSite(siteIdParam);
-        setSiteData(site.siteId, site.name, site.draftContent);
+        setSiteData(
+          site.siteId,
+          site.name,
+          site.draftContent,
+          site.deploymentStatus,
+          site.customDomain,
+          site.domainVerified
+        );
       } catch (err) {
         console.error("Failed to load site:", err);
         setLoadError(
@@ -150,18 +193,52 @@ export default function EditorPage() {
     deleteSection(selectedPageId, sectionId);
   };
 
+  const isFirstPublish = deploymentStatus === "draft";
+
+  const domainRegex =
+    /^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9]?\.[a-zA-Z]{2,}$/;
+
+  const handleOpenPublish = () => {
+    setPublishError(null);
+    setPublishResult(null);
+    setDomainInput("");
+    setDomainError(null);
+    setSkipDomain(false);
+    setCopiedToken(false);
+    // First publish → domain step; subsequent → confirm directly
+    setPublishStep(isFirstPublish ? "domain" : "confirm");
+    setShowPublishModal(true);
+  };
+
+  const handleDomainNext = () => {
+    if (!skipDomain && domainInput) {
+      if (!domainRegex.test(domainInput.trim())) {
+        setDomainError("Please enter a valid domain (e.g. mydomain.com)");
+        return;
+      }
+    }
+    setDomainError(null);
+    setPublishStep("confirm");
+  };
+
   const handlePublish = async () => {
     if (!siteId) return;
 
     setIsPublishing(true);
     setPublishError(null);
     try {
-      await publishSiteApi(siteId);
-      setPublishSuccess(true);
-      setTimeout(() => {
-        setShowPublishModal(false);
-        setPublishSuccess(false);
-      }, 2000);
+      const options =
+        isFirstPublish && domainInput && !skipDomain
+          ? { customDomain: domainInput.trim() }
+          : undefined;
+
+      const result = await publishSiteApi(siteId, options);
+      setPublishResult(result);
+      setDeploymentStatus("published");
+      if (result.customDomain) {
+        setStoreDomain(result.customDomain, result.domainVerified);
+      }
+      setPublishStep("success");
     } catch (err) {
       console.error("Failed to publish:", err);
       setPublishError(
@@ -172,6 +249,71 @@ export default function EditorPage() {
     } finally {
       setIsPublishing(false);
     }
+  };
+
+  // Domain settings handlers
+  const handleOpenDomainSettings = () => {
+    setDomainSettingsInput(storeDomain || "");
+    setDomainSettingsError(null);
+    setDomainSettingsResult(null);
+    setDomainSettingsLoading(false);
+    setCopiedToken(false);
+    setShowDomainModal(true);
+  };
+
+  const handleUpdateDomain = async () => {
+    if (!siteId) return;
+
+    const newDomain = domainSettingsInput.trim() || null;
+    if (newDomain && !domainRegex.test(newDomain)) {
+      setDomainSettingsError("Please enter a valid domain (e.g. mydomain.com)");
+      return;
+    }
+
+    setDomainSettingsLoading(true);
+    setDomainSettingsError(null);
+    try {
+      const result = await updateSiteDomain(siteId, newDomain);
+      setStoreDomain(result.customDomain, result.domainVerified);
+      if (result.domainSetup) {
+        setDomainSettingsResult(result.domainSetup);
+      } else {
+        setShowDomainModal(false);
+      }
+    } catch (err) {
+      console.error("Failed to update domain:", err);
+      setDomainSettingsError(
+        err instanceof Error
+          ? err.message
+          : "Failed to update domain. Please try again."
+      );
+    } finally {
+      setDomainSettingsLoading(false);
+    }
+  };
+
+  const handleRemoveDomain = async () => {
+    if (!siteId) return;
+    setDomainSettingsLoading(true);
+    setDomainSettingsError(null);
+    try {
+      await updateSiteDomain(siteId, null);
+      setStoreDomain(null, false);
+      setShowDomainModal(false);
+    } catch (err) {
+      console.error("Failed to remove domain:", err);
+      setDomainSettingsError(
+        err instanceof Error ? err.message : "Failed to remove domain."
+      );
+    } finally {
+      setDomainSettingsLoading(false);
+    }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedToken(true);
+    setTimeout(() => setCopiedToken(false), 2000);
   };
 
   const handleSectionPropChange = useCallback(
@@ -294,10 +436,20 @@ export default function EditorPage() {
               Preview
             </a>
           </Button>
-          <Button size="sm" onClick={() => setShowPublishModal(true)}>
+          <Button size="sm" onClick={handleOpenPublish}>
             <Rocket className="w-4 h-4 mr-2" />
             Publish
           </Button>
+          {deploymentStatus === "published" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleOpenDomainSettings}
+              title="Domain settings"
+            >
+              <LinkIcon className="w-4 h-4" />
+            </Button>
+          )}
         </div>
       </header>
 
@@ -579,25 +731,115 @@ export default function EditorPage() {
       <Modal
         isOpen={showPublishModal}
         onClose={() => !isPublishing && setShowPublishModal(false)}
-        title="Publish Your Site"
-        size="sm"
+        title={
+          publishStep === "domain"
+            ? "Connect Your Domain"
+            : publishStep === "success"
+            ? "Published!"
+            : "Publish Your Site"
+        }
+        size="md"
       >
-        {publishSuccess ? (
-          <div className="text-center py-6">
-            <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-4">
-              <Check className="w-8 h-8 text-green-400" />
+        {publishStep === "domain" && (
+          <div>
+            <p className="text-gray-300 mb-4">
+              Connect a custom domain to your site, or use the default builder
+              subdomain.
+            </p>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1.5">
+                  Custom Domain
+                </label>
+                <input
+                  type="text"
+                  value={domainInput}
+                  onChange={(e) => {
+                    setDomainInput(e.target.value);
+                    setDomainError(null);
+                    setSkipDomain(false);
+                  }}
+                  disabled={skipDomain}
+                  placeholder="mydomain.com"
+                  className={`w-full bg-white/5 border rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 transition-colors ${
+                    domainError ? "border-red-500/50" : "border-white/10"
+                  } ${skipDomain ? "opacity-50" : ""}`}
+                />
+                {domainError && (
+                  <p className="text-red-400 text-xs mt-1.5">{domainError}</p>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setSkipDomain(!skipDomain);
+                    if (!skipDomain) {
+                      setDomainInput("");
+                      setDomainError(null);
+                    }
+                  }}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-all ${
+                    skipDomain
+                      ? "border-violet-500/50 bg-violet-500/10 text-violet-300"
+                      : "border-white/10 text-gray-400 hover:text-white hover:border-white/20"
+                  }`}
+                >
+                  {skipDomain && <Check className="w-3.5 h-3.5" />}
+                  Use default subdomain
+                </button>
+              </div>
+
+              {skipDomain && siteId && (
+                <p className="text-sm text-gray-400 bg-white/5 px-3 py-2 rounded-lg">
+                  Your site will be available at{" "}
+                  <span className="text-violet-300 font-mono text-xs">
+                    {siteId}.
+                    {process.env.NEXT_PUBLIC_BUILDER_DOMAIN || "builder.com"}
+                  </span>
+                </p>
+              )}
             </div>
-            <h3 className="text-lg font-semibold text-white mb-2">
-              Published!
-            </h3>
-            <p className="text-gray-400">Your site is now live.</p>
+
+            <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-white/10">
+              <Button
+                variant="ghost"
+                onClick={() => setShowPublishModal(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleDomainNext}
+                disabled={!skipDomain && !domainInput.trim()}
+              >
+                Continue
+              </Button>
+            </div>
           </div>
-        ) : (
+        )}
+
+        {publishStep === "confirm" && (
           <>
-            <p className="text-gray-300 mb-6">
+            <p className="text-gray-300 mb-4">
               This will publish all your changes and make them live on your
               website.
             </p>
+
+            {isFirstPublish && domainInput && !skipDomain && (
+              <div className="bg-white/5 rounded-lg p-3 mb-4">
+                <p className="text-sm text-gray-400">
+                  Custom domain:{" "}
+                  <span className="text-white font-medium">
+                    {domainInput.trim()}
+                  </span>
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  You'll need to configure DNS after publishing
+                </p>
+              </div>
+            )}
+
             {publishError && (
               <p className="text-red-400 text-sm mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
                 {publishError}
@@ -606,10 +848,16 @@ export default function EditorPage() {
             <div className="flex justify-end gap-3">
               <Button
                 variant="ghost"
-                onClick={() => setShowPublishModal(false)}
+                onClick={() => {
+                  if (isFirstPublish) {
+                    setPublishStep("domain");
+                  } else {
+                    setShowPublishModal(false);
+                  }
+                }}
                 disabled={isPublishing}
               >
-                Cancel
+                {isFirstPublish ? "Back" : "Cancel"}
               </Button>
               <Button onClick={handlePublish} isLoading={isPublishing}>
                 <Rocket className="w-4 h-4 mr-2" />
@@ -617,6 +865,220 @@ export default function EditorPage() {
               </Button>
             </div>
           </>
+        )}
+
+        {publishStep === "success" && publishResult && (
+          <div className="py-2">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-4">
+                <Check className="w-8 h-8 text-green-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-white mb-2">
+                Your site is live!
+              </h3>
+              <a
+                href={publishResult.publishedUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-violet-400 hover:text-violet-300 text-sm transition-colors"
+              >
+                {publishResult.publishedUrl}
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+
+            {/* DNS instructions when custom domain was set */}
+            {publishResult.domainSetup && (
+              <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4 mb-4">
+                <h4 className="text-sm font-medium text-amber-300 mb-3 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4" />
+                  DNS Configuration Required
+                </h4>
+                <p className="text-xs text-gray-400 mb-3">
+                  Add these records to your domain's DNS settings:
+                </p>
+
+                <div className="space-y-3">
+                  {/* TXT Record */}
+                  <div className="bg-black/20 rounded-lg p-3">
+                    <p className="text-xs text-gray-500 mb-1">TXT Record</p>
+                    <div className="flex items-center justify-between">
+                      <code className="text-xs text-violet-300 font-mono break-all">
+                        {publishResult.domainSetup.verificationToken}
+                      </code>
+                      <button
+                        onClick={() =>
+                          copyToClipboard(
+                            publishResult.domainSetup!.verificationToken
+                          )
+                        }
+                        className="ml-2 p-1 text-gray-400 hover:text-white transition-colors flex-shrink-0"
+                        title="Copy token"
+                      >
+                        {copiedToken ? (
+                          <Check className="w-3.5 h-3.5 text-green-400" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* CNAME Record */}
+                  <div className="bg-black/20 rounded-lg p-3">
+                    <p className="text-xs text-gray-500 mb-1">CNAME Record</p>
+                    <code className="text-xs text-violet-300 font-mono">
+                      {publishResult.customDomain} → {siteId}.
+                      {process.env.NEXT_PUBLIC_BUILDER_DOMAIN || "builder.com"}
+                    </code>
+                  </div>
+                </div>
+
+                <p className="text-xs text-gray-500 mt-3">
+                  DNS changes may take up to 48 hours to propagate. You can
+                  verify your domain later from domain settings.
+                </p>
+              </div>
+            )}
+
+            <div className="flex justify-end">
+              <Button onClick={() => setShowPublishModal(false)}>Done</Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Domain Settings Modal */}
+      <Modal
+        isOpen={showDomainModal}
+        onClose={() => !domainSettingsLoading && setShowDomainModal(false)}
+        title="Domain Settings"
+        size="md"
+      >
+        {domainSettingsResult ? (
+          <div>
+            <div className="text-center mb-4">
+              <div className="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-3">
+                <Check className="w-6 h-6 text-green-400" />
+              </div>
+              <p className="text-white font-medium">Domain Updated</p>
+            </div>
+
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4 mb-4">
+              <h4 className="text-sm font-medium text-amber-300 mb-3 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4" />
+                DNS Configuration Required
+              </h4>
+              <div className="space-y-3">
+                <div className="bg-black/20 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 mb-1">TXT Record</p>
+                  <div className="flex items-center justify-between">
+                    <code className="text-xs text-violet-300 font-mono break-all">
+                      {domainSettingsResult.verificationToken}
+                    </code>
+                    <button
+                      onClick={() =>
+                        copyToClipboard(domainSettingsResult.verificationToken)
+                      }
+                      className="ml-2 p-1 text-gray-400 hover:text-white transition-colors flex-shrink-0"
+                    >
+                      {copiedToken ? (
+                        <Check className="w-3.5 h-3.5 text-green-400" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+                <div className="bg-black/20 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 mb-1">CNAME Record</p>
+                  <code className="text-xs text-violet-300 font-mono">
+                    {storeDomain} → {siteId}.
+                    {process.env.NEXT_PUBLIC_BUILDER_DOMAIN || "builder.com"}
+                  </code>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <Button onClick={() => setShowDomainModal(false)}>Done</Button>
+            </div>
+          </div>
+        ) : (
+          <div>
+            {storeDomain && (
+              <div className="bg-white/5 rounded-lg p-3 mb-4">
+                <p className="text-sm text-gray-400">
+                  Current domain:{" "}
+                  <span className="text-white font-medium">{storeDomain}</span>
+                </p>
+                <p className="text-xs mt-1">
+                  {domainVerified ? (
+                    <span className="text-green-400">✓ Verified</span>
+                  ) : (
+                    <span className="text-amber-400">
+                      ⏳ Pending verification
+                    </span>
+                  )}
+                </p>
+              </div>
+            )}
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-300 mb-1.5">
+                {storeDomain ? "New Domain" : "Custom Domain"}
+              </label>
+              <input
+                type="text"
+                value={domainSettingsInput}
+                onChange={(e) => {
+                  setDomainSettingsInput(e.target.value);
+                  setDomainSettingsError(null);
+                }}
+                placeholder="mydomain.com"
+                className={`w-full bg-white/5 border rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 transition-colors ${
+                  domainSettingsError ? "border-red-500/50" : "border-white/10"
+                }`}
+              />
+              {domainSettingsError && (
+                <p className="text-red-400 text-xs mt-1.5">
+                  {domainSettingsError}
+                </p>
+              )}
+            </div>
+
+            <div className="flex justify-between gap-3">
+              <div>
+                {storeDomain && (
+                  <Button
+                    variant="ghost"
+                    onClick={handleRemoveDomain}
+                    disabled={domainSettingsLoading}
+                    className="text-red-400 hover:text-red-300"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Remove Domain
+                  </Button>
+                )}
+              </div>
+              <div className="flex gap-3">
+                <Button
+                  variant="ghost"
+                  onClick={() => setShowDomainModal(false)}
+                  disabled={domainSettingsLoading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleUpdateDomain}
+                  isLoading={domainSettingsLoading}
+                  disabled={!domainSettingsInput.trim()}
+                >
+                  {storeDomain ? "Update Domain" : "Add Domain"}
+                </Button>
+              </div>
+            </div>
+          </div>
         )}
       </Modal>
     </div>

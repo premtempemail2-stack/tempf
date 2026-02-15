@@ -44,3 +44,26 @@ export async function getPreviewServer(siteId: string): Promise<TemplateConfig> 
   // Backend returns { success, data: { siteId, name, content, dynamicContent, metadata } }
   return json.data.content;
 }
+
+/**
+ * Lookup siteId by custom domain (server-safe).
+ * Backend route: GET /public/domains/lookup/:domain
+ */
+export async function lookupDomainServer(domain: string): Promise<{ siteId: string; domain: string } | null> {
+  try {
+    const res = await fetch(`${BASE_URL}/public/domains/lookup/${domain}`, {
+      next: { revalidate: 300 }, // Cache lookup for 5 minutes
+    });
+
+    if (!res.ok) {
+      if (res.status === 404) return null;
+      throw new Error(`Failed to lookup domain: ${res.status} ${res.statusText}`);
+    }
+
+    const json = await res.json();
+    return json.data;
+  } catch (error) {
+    console.error(`Error looking up domain "${domain}":`, error);
+    return null;
+  }
+}

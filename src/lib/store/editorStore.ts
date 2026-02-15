@@ -7,6 +7,9 @@ interface EditorState {
   siteName: string;
   content: TemplateConfig | null;
   originalContent: TemplateConfig | null;
+  deploymentStatus: 'draft' | 'published' | 'updating' | 'failed';
+  customDomain: string | null;
+  domainVerified: boolean;
   
   // Editor state
   selectedPageId: string | null;
@@ -19,7 +22,7 @@ interface EditorState {
   previewMode: 'desktop' | 'tablet' | 'mobile';
   
   // Actions
-  setSiteData: (siteId: string, name: string, content: TemplateConfig) => void;
+  setSiteData: (siteId: string, name: string, content: TemplateConfig, deploymentStatus?: string, customDomain?: string | null, domainVerified?: boolean) => void;
   setContent: (content: TemplateConfig) => void;
   selectPage: (pageId: string | null) => void;
   selectSection: (sectionId: string | null) => void;
@@ -47,6 +50,8 @@ interface EditorState {
   setIsPublishing: (isPublishing: boolean) => void;
   markSaved: () => void;
   setPreviewMode: (mode: 'desktop' | 'tablet' | 'mobile') => void;
+  setDeploymentStatus: (status: 'draft' | 'published' | 'updating' | 'failed') => void;
+  setCustomDomain: (domain: string | null, verified?: boolean) => void;
   
   // Reset
   reset: () => void;
@@ -57,6 +62,9 @@ const initialState = {
   siteName: '',
   content: null,
   originalContent: null,
+  deploymentStatus: 'draft' as const,
+  customDomain: null as string | null,
+  domainVerified: false,
   selectedPageId: null,
   selectedSectionId: null,
   isDirty: false,
@@ -68,12 +76,15 @@ const initialState = {
 export const useEditorStore = create<EditorState>((set, get) => ({
   ...initialState,
 
-  setSiteData: (siteId, name, content) => {
+  setSiteData: (siteId, name, content, deploymentStatus, customDomain, domainVerified) => {
     set({
       siteId,
       siteName: name,
       content,
       originalContent: JSON.parse(JSON.stringify(content)),
+      deploymentStatus: (deploymentStatus as EditorState['deploymentStatus']) || 'draft',
+      customDomain: customDomain || null,
+      domainVerified: domainVerified || false,
       selectedPageId: content.pages?.[0]?.id || null,
       isDirty: false,
     });
@@ -265,6 +276,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   setPreviewMode: (previewMode) => set({ previewMode }),
+
+  setDeploymentStatus: (deploymentStatus) => set({ deploymentStatus }),
+
+  setCustomDomain: (customDomain, verified) => set({
+    customDomain,
+    domainVerified: verified ?? false,
+  }),
 
   reset: () => set(initialState),
 }));
