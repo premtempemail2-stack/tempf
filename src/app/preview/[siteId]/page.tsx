@@ -96,17 +96,7 @@ export default function PreviewPage() {
 
   return (
     <div className="min-h-screen bg-gray-950">
-      {/* Navigation */}
-      <Navbar logoText="Preview" links={content.navigation} ctaText="" />
-
-      {/* Page Sections */}
       {currentPage && renderSections(currentPage.sections)}
-
-      {/* Footer */}
-      <Footer
-        logoText="Preview"
-        {...(content.footer as Record<string, unknown>)}
-      />
     </div>
   );
 }

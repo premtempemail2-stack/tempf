@@ -100,46 +100,8 @@ export default function Footer({
           <div className="lg:col-span-1">
             <div className="text-2xl font-bold text-white mb-4">{logoText}</div>
             {description && <p className="text-gray-400 mb-6">{description}</p>}
-
-            {/* Social Links */}
-            {socialLinks && socialLinks.length > 0 && (
-              <div className="flex gap-4">
-                {socialLinks.map((social, index) => (
-                  <a
-                    key={index}
-                    href={social.url}
-                    className="w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    {socialIcons[social.platform] || social.platform}
-                  </a>
-                ))}
-              </div>
-            )}
           </div>
-
-          {/* Link Columns */}
-          {resolvedColumns.map((column, index) => (
-            <div key={index}>
-              <h4 className="text-white font-semibold mb-4">{column.title}</h4>
-              <ul className="space-y-3">
-                {column.links.map((link, linkIndex) => (
-                  <li key={linkIndex}>
-                    <a
-                      href={link.href}
-                      className="text-gray-400 hover:text-white transition-colors"
-                    >
-                      {link.label}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
         </div>
-
-        {/* Copyright */}
         {copyright && (
           <div className="mt-12 pt-8 border-t border-white/10 text-center">
             <p className="text-gray-500">{copyright}</p>

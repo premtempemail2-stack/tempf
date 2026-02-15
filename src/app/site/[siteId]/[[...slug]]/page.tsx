@@ -88,17 +88,7 @@ export default async function PublishedSitePage({ params }: PageProps) {
 
   return (
     <div className="min-h-screen bg-gray-950">
-      {/* Navigation */}
-      <Navbar logoText="Website" links={content.navigation} ctaText="" />
-
-      {/* Page Sections */}
       <SectionRenderer sections={currentPage.sections} />
-
-      {/* Footer */}
-      <Footer
-        logoText="Website"
-        {...(content.footer as Record<string, unknown>)}
-      />
     </div>
   );
 }

@@ -144,21 +144,7 @@ export default function TemplatePreviewPage() {
 
       {/* Preview Content */}
       <main className="flex-1 pt-24 md:pt-16">
-        {/* Navigation Preview */}
-        <Navbar
-          logoText={template.name}
-          links={template.config.navigation}
-          sticky={false}
-        />
-
-        {/* Page Sections */}
         {currentPage && renderSections(currentPage.sections)}
-
-        {/* Footer Preview */}
-        <Footer
-          logoText={template.name}
-          {...(template.config.footer as Record<string, unknown>)}
-        />
       </main>
 
       {/* Floating Use Template Button (Mobile) */}
