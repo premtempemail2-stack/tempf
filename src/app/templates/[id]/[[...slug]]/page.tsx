@@ -15,9 +15,9 @@ export default function TemplatePreviewPage() {
   const router = useRouter();
   const { isAuthenticated } = useAuth();
   const templateId = params.id as string;
+  const slug = params.slug as string[] | undefined;
 
   const [template, setTemplate] = useState<Template | null>(null);
-  const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,7 +71,37 @@ export default function TemplatePreviewPage() {
   }
 
   const pages = template.config.pages || [];
-  const currentPage: Page | undefined = pages[currentPageIndex];
+
+  // Normalize the current path from URL params
+  const requestedSlug = slug ? slug.join("/") : "";
+
+  const normalize = (s: string) => {
+    if (!s || s === "/" || s === "index") return "";
+    return s.replace(/^\/+|\/+$/g, "");
+  };
+
+  const normalizedRequested = normalize(requestedSlug);
+
+  // Find the correct page
+  const currentPage =
+    pages.find((p) => normalize(p.slug) === normalizedRequested) ||
+    (normalizedRequested === "" ? pages[0] : null);
+
+  if (!currentPage) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-950">
+        <div className="text-center pt-20">
+          <h1 className="text-2xl font-bold text-white mb-2">Page Not Found</h1>
+          <p className="text-gray-400 mb-6">
+            The page you're looking for doesn't exist in this template.
+          </p>
+          <Link href={`/templates/${templateId}`}>
+            <Button variant="ghost">Back to Home</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -98,19 +128,24 @@ export default function TemplatePreviewPage() {
 
           {/* Center - Page Tabs */}
           <div className="hidden md:flex items-center gap-1 bg-white/5 rounded-lg p-1">
-            {pages.map((page, index) => (
-              <button
-                key={page.id}
-                onClick={() => setCurrentPageIndex(index)}
-                className={`px-4 py-1.5 text-sm rounded-md transition-all ${
-                  index === currentPageIndex
-                    ? "bg-violet-500/20 text-violet-300"
-                    : "text-gray-400 hover:text-white hover:bg-white/5"
-                }`}
-              >
-                {page.title}
-              </button>
-            ))}
+            {pages.map((page) => {
+              const pageSlug = normalize(page.slug);
+              const isActive = normalize(currentPage.slug) === pageSlug;
+
+              return (
+                <Link
+                  key={page.id}
+                  href={`/templates/${templateId}/${pageSlug}`}
+                  className={`px-4 py-1.5 text-sm rounded-md transition-all ${
+                    isActive
+                      ? "bg-violet-500/20 text-violet-300"
+                      : "text-gray-400 hover:text-white hover:bg-white/5"
+                  }`}
+                >
+                  {page.title}
+                </Link>
+              );
+            })}
           </div>
 
           {/* Right - Actions */}
@@ -129,12 +164,18 @@ export default function TemplatePreviewPage() {
         {/* Mobile Page Selector */}
         <div className="md:hidden px-6 pb-3">
           <select
-            value={currentPageIndex}
-            onChange={(e) => setCurrentPageIndex(Number(e.target.value))}
+            value={normalize(currentPage.slug)}
+            onChange={(e) =>
+              router.push(`/templates/${templateId}/${e.target.value}`)
+            }
             className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm"
           >
-            {pages.map((page, index) => (
-              <option key={page.id} value={index} className="bg-gray-900">
+            {pages.map((page) => (
+              <option
+                key={page.id}
+                value={normalize(page.slug)}
+                className="bg-gray-900"
+              >
                 {page.title}
               </option>
             ))}
@@ -144,7 +185,7 @@ export default function TemplatePreviewPage() {
 
       {/* Preview Content */}
       <main className="flex-1 pt-24 md:pt-16">
-        {currentPage && renderSections(currentPage.sections)}
+        {renderSections(currentPage.sections)}
       </main>
 
       {/* Floating Use Template Button (Mobile) */}

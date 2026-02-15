@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui";
+import { useRenderContext } from "../RenderProvider";
 
 interface NavLink {
   label: string;
@@ -53,6 +54,7 @@ export default function School1Navbar({
   ctaText = "Enquire Now",
   ctaLink = "./about",
 }: School1NavbarProps) {
+  const { resolveLink } = useRenderContext();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -125,7 +127,7 @@ export default function School1Navbar({
       >
         <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
           {/* Logo */}
-          <Link href="./" className="flex items-center">
+          <Link href={resolveLink("./")} className="flex items-center">
             {logo ? (
               <img src={logo} alt={logoText} className="h-12 w-auto" />
             ) : (
@@ -149,7 +151,7 @@ export default function School1Navbar({
             {links.map((link) => (
               <Link
                 key={link.label}
-                href={link.href}
+                href={resolveLink(link.href)}
                 className="text-[#333] font-semibold hover:text-[#e91e63] transition-colors text-sm"
               >
                 {link.label}
@@ -159,7 +161,7 @@ export default function School1Navbar({
 
           {/* Actions */}
           <div className="flex items-center gap-4">
-            <Link href={ctaLink}>
+            <Link href={resolveLink(ctaLink)}>
               <Button className="bg-[#e91e63] hover:bg-[#c2185b] text-white rounded-full px-8 py-4 text-sm font-bold transition-all transform hover:scale-105 shadow-lg">
                 {ctaText}
               </Button>
@@ -180,7 +182,7 @@ export default function School1Navbar({
               {links.map((link) => (
                 <Link
                   key={link.label}
-                  href={link.href}
+                  href={resolveLink(link.href)}
                   className="text-[#333] font-semibold hover:text-[#e91e63]"
                   onClick={() => setIsMobileMenuOpen(false)}
                 >

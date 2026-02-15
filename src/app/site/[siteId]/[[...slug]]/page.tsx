@@ -63,15 +63,22 @@ export default async function PublishedSitePage({ params }: PageProps) {
     );
   }
 
-  // Find the correct page based on slug
-  // Seed data uses "index" for homepage, while some configs use "/"
-  const currentPath = slug ? `/${slug.join("/")}` : "/";
+  // Normalize the current path from URL params
+  // slug is an array of path segments, e.g., ["about", "team"] -> "about/team"
+  const requestedSlug = slug ? slug.join("/") : "";
+
+  // Helper to normalize a slug for comparison
+  const normalize = (s: string) => {
+    if (!s || s === "/" || s === "index") return "";
+    return s.replace(/^\/+|\/+$/g, ""); // Strip leading/trailing slashes
+  };
+
+  const normalizedRequested = normalize(requestedSlug);
+
+  // Find the correct page by comparing normalized slugs
   const currentPage =
-    content.pages.find((p) => p.slug === currentPath) ||
-    (currentPath === "/"
-      ? content.pages.find((p) => p.slug === "index")
-      : null) ||
-    content.pages[0];
+    content.pages.find((p) => normalize(p.slug) === normalizedRequested) ||
+    (normalizedRequested === "" ? content.pages[0] : null);
 
   if (!currentPage) {
     return (

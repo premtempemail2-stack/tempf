@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui";
 import { NavItem } from "@/lib/types";
+import { useRenderContext } from "./RenderProvider";
 
 interface NavTab {
   id?: string;
@@ -34,6 +35,7 @@ export default function Navbar({
   logoUrl,
   tabs,
 }: NavbarProps) {
+  const { resolveLink } = useRenderContext();
   const [isOpen, setIsOpen] = useState(false);
 
   // Resolve aliases: convert tabs to links format if links not provided
@@ -49,7 +51,6 @@ export default function Navbar({
           { label: "Contact", href: "#contact" },
         ]);
 
-
   return (
     <nav
       className={`w-full py-4 px-6 ${
@@ -60,7 +61,10 @@ export default function Navbar({
     >
       <div className="max-w-6xl mx-auto flex items-center justify-between">
         {/* Logo */}
-        <a href="/" className="flex items-center gap-2 text-xl font-bold text-white">
+        <a
+          href={resolveLink("/")}
+          className="flex items-center gap-2 text-xl font-bold text-white"
+        >
           {resolvedLogo && (
             <img src={resolvedLogo} alt={logoText} className="h-8 w-auto" />
           )}
@@ -72,7 +76,7 @@ export default function Navbar({
           {resolvedLinks.map((link, index) => (
             <a
               key={index}
-              href={link.href}
+              href={resolveLink(link.href)}
               className="text-gray-300 hover:text-white transition-colors"
             >
               {link.label}
@@ -83,7 +87,7 @@ export default function Navbar({
         {/* CTA Button */}
         <div className="hidden md:block">
           {ctaText && (
-            <a href={ctaLink}>
+            <a href={resolveLink(ctaLink)}>
               <Button>{ctaText}</Button>
             </a>
           )}
@@ -105,7 +109,7 @@ export default function Navbar({
             {resolvedLinks.map((link, index) => (
               <a
                 key={index}
-                href={link.href}
+                href={resolveLink(link.href)}
                 className="text-gray-300 hover:text-white transition-colors py-2"
                 onClick={() => setIsOpen(false)}
               >
@@ -113,7 +117,7 @@ export default function Navbar({
               </a>
             ))}
             {ctaText && (
-              <a href={ctaLink} className="mt-2">
+              <a href={resolveLink(ctaLink)} className="mt-2">
                 <Button className="w-full">{ctaText}</Button>
               </a>
             )}

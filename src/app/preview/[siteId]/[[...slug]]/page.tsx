@@ -11,6 +11,7 @@ export default function PreviewPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const siteId = params.siteId as string;
+  const slug = params.slug as string[] | undefined;
   const mode = searchParams.get("mode") || "draft";
 
   const [content, setContent] = useState<TemplateConfig | null>(null);
@@ -92,11 +93,37 @@ export default function PreviewPage() {
     );
   }
 
-  const currentPage = content.pages?.[0]; // Default to first page
+  // Normalize the current path from URL params
+  const requestedSlug = slug ? slug.join("/") : "";
+
+  const normalize = (s: string) => {
+    if (!s || s === "/" || s === "index") return "";
+    return s.replace(/^\/+|\/+$/g, "");
+  };
+
+  const normalizedRequested = normalize(requestedSlug);
+
+  // Find the correct page
+  const currentPage =
+    content.pages?.find((p) => normalize(p.slug) === normalizedRequested) ||
+    (normalizedRequested === "" ? content.pages?.[0] : null);
+
+  if (!currentPage) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-950">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-white mb-2">Page Not Found</h1>
+          <p className="text-gray-400">
+            The page you're looking for doesn't exist in this preview.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-950">
-      {currentPage && renderSections(currentPage.sections)}
+      {renderSections(currentPage.sections)}
     </div>
   );
 }

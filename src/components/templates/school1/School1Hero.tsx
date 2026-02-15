@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui";
 import { motion } from "framer-motion";
 import Link from "next/link";
+import { useRenderContext } from "../RenderProvider";
 
 interface School1HeroProps {
   headline?: string;
@@ -25,6 +26,8 @@ export default function School1Hero({
   leftGraphic, // Boy
   rightGraphic, // Girl
 }: School1HeroProps) {
+  const { resolveLink } = useRenderContext();
+
   return (
     <section className="relative min-h-[90vh] flex items-center justify-center overflow-hidden bg-[#fafafa] pt-20">
       {/* Decorative Top Border (Scalloped edge effect) */}
@@ -67,7 +70,6 @@ export default function School1Hero({
             >
               {subheadline}
             </motion.span>
-
             <motion.h1
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -76,13 +78,12 @@ export default function School1Hero({
             >
               {headline}
             </motion.h1>
-
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.4 }}
             >
-              <Link href={ctaLink}>
+              <Link href={resolveLink(ctaLink)}>
                 <Button className="bg-[#e91e63] hover:bg-[#c2185b] text-white rounded-full px-12 py-4 text-lg font-bold transition-all transform hover:scale-105 shadow-xl">
                   {ctaText}
                 </Button>

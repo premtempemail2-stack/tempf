@@ -1,4 +1,5 @@
 import type { JSX } from "react";
+import { useRenderContext } from "./RenderProvider";
 
 interface FooterLink {
   label: string;
@@ -39,6 +40,7 @@ export default function Footer({
   // Seed data alias
   links,
 }: FooterProps) {
+  const { resolveLink } = useRenderContext();
   // Resolve: if no columns provided but flat links exist, convert them into a single column
   const resolvedColumns: FooterColumn[] =
     columns ||
@@ -98,9 +100,33 @@ export default function Footer({
         <div className="grid gap-12 lg:grid-cols-4">
           {/* Brand Column */}
           <div className="lg:col-span-1">
-            <div className="text-2xl font-bold text-white mb-4">{logoText}</div>
+            <a
+              href={resolveLink("/")}
+              className="text-2xl font-bold text-white mb-4 block"
+            >
+              {logoText}
+            </a>
             {description && <p className="text-gray-400 mb-6">{description}</p>}
           </div>
+
+          {/* Links Columns */}
+          {resolvedColumns.map((column, index) => (
+            <div key={index}>
+              <h3 className="text-white font-semibold mb-4">{column.title}</h3>
+              <ul className="space-y-2">
+                {column.links.map((link, linkIndex) => (
+                  <li key={linkIndex}>
+                    <a
+                      href={resolveLink(link.href)}
+                      className="text-gray-400 hover:text-white transition-colors text-sm"
+                    >
+                      {link.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
         {copyright && (
           <div className="mt-12 pt-8 border-t border-white/10 text-center">

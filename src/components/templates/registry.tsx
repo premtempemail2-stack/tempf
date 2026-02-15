@@ -66,8 +66,14 @@ export function renderSection(section: Section, index: number) {
 }
 
 // Render multiple sections
+import { RenderProvider } from "./RenderProvider";
+
 export function renderSections(sections: Section[]) {
-  return sections.map((section, index) => renderSection(section, index));
+  return (
+    <RenderProvider>
+      {sections.map((section, index) => renderSection(section, index))}
+    </RenderProvider>
+  );
 }
 
 // Get component by type (for editor)

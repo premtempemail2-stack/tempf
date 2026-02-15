@@ -1,4 +1,5 @@
-import { Button } from '@/components/ui';
+import { Button } from "@/components/ui";
+import { useRenderContext } from "./RenderProvider";
 
 interface CTAProps {
   title?: string;
@@ -7,42 +8,51 @@ interface CTAProps {
   primaryButtonLink?: string;
   secondaryButtonText?: string;
   secondaryButtonLink?: string;
-  backgroundStyle?: 'gradient' | 'solid' | 'image';
+  backgroundStyle?: "gradient" | "solid" | "image";
   backgroundImage?: string;
 }
 
 export default function CTA({
-  title = 'Ready to Get Started?',
-  description = 'Join thousands of satisfied customers and start building your dream website today.',
-  primaryButtonText = 'Start Free Trial',
-  primaryButtonLink = '#',
-  secondaryButtonText = 'Talk to Sales',
-  secondaryButtonLink = '#',
-  backgroundStyle = 'gradient',
+  title = "Ready to Get Started?",
+  description = "Join thousands of satisfied customers and start building your dream website today.",
+  primaryButtonText = "Start Free Trial",
+  primaryButtonLink = "#",
+  secondaryButtonText = "Talk to Sales",
+  secondaryButtonLink = "#",
+  backgroundStyle = "gradient",
   backgroundImage,
 }: CTAProps) {
+  const { resolveLink } = useRenderContext();
   const bgClasses = {
-    gradient: 'bg-gradient-to-r from-violet-600 to-indigo-600',
-    solid: 'bg-violet-600',
-    image: '',
+    gradient: "bg-gradient-to-r from-violet-600 to-indigo-600",
+    solid: "bg-violet-600",
+    image: "",
   };
 
   return (
     <section
-      className={`relative py-20 px-6 ${backgroundStyle !== 'image' ? bgClasses[backgroundStyle] : ''}`}
+      className={`relative py-20 px-6 ${
+        backgroundStyle !== "image" ? bgClasses[backgroundStyle] : ""
+      }`}
       style={
-        backgroundStyle === 'image' && backgroundImage
-          ? { backgroundImage: `url(${backgroundImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+        backgroundStyle === "image" && backgroundImage
+          ? {
+              backgroundImage: `url(${backgroundImage})`,
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+            }
           : {}
       }
     >
       {/* Overlay for image background */}
-      {backgroundStyle === 'image' && (
+      {backgroundStyle === "image" && (
         <div className="absolute inset-0 bg-violet-900/80" />
       )}
 
       <div className="relative z-10 max-w-4xl mx-auto text-center">
-        <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">{title}</h2>
+        <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
+          {title}
+        </h2>
         {description && (
           <p className="text-lg md:text-xl text-white/80 mb-8 max-w-2xl mx-auto">
             {description}
@@ -51,7 +61,7 @@ export default function CTA({
 
         <div className="flex flex-wrap justify-center gap-4">
           {primaryButtonText && (
-            <a href={primaryButtonLink}>
+            <a href={resolveLink(primaryButtonLink)}>
               <Button
                 size="lg"
                 className="bg-white text-violet-600 hover:bg-gray-100 shadow-lg"
@@ -61,7 +71,7 @@ export default function CTA({
             </a>
           )}
           {secondaryButtonText && (
-            <a href={secondaryButtonLink}>
+            <a href={resolveLink(secondaryButtonLink)}>
               <Button
                 variant="secondary"
                 size="lg"
